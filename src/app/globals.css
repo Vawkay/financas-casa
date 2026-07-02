@@ -1,26 +1,74 @@
 @import "tailwindcss";
 
+/*
+  Tema inspirado no design system do Supabase: dark-first, verde de marca
+  (#3ECF8E) como acento, escala de cinzas neutra e bordas sutis.
+  Tokens compatíveis com o padrão shadcn.
+*/
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #1c1c1c;
+  --foreground: #ededed;
+  --card: #1f1f1f;
+  --card-foreground: #ededed;
+  --muted: #2a2a2a;
+  --muted-foreground: #898989;
+  --border: #2e2e2e;
+  --input: #2e2e2e;
+  --primary: #3ecf8e; /* verde de marca Supabase */
+  --primary-foreground: #11181c; /* texto escuro sobre o verde */
+  --positive: #3ecf8e;
+  --negative: #f87171;
+  --warning: #f59e0b;
+  --radius: 0.5rem;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-positive: var(--positive);
+  --color-negative: var(--negative);
+  --color-warning: var(--warning);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  --radius-lg: var(--radius);
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans), Arial, Helvetica, sans-serif;
+}
+
+/* Scrollbar discreta no estilo Supabase */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #3e3e3e transparent;
+}
+
+/* Barra de progresso indeterminada (importação/IA) */
+@keyframes indeterminate {
+  0% { transform: translateX(-100%) scaleX(0.4); }
+  50% { transform: translateX(20%) scaleX(0.6); }
+  100% { transform: translateX(100%) scaleX(0.4); }
+}
+.animate-indeterminate {
+  animation: indeterminate 1.15s ease-in-out infinite;
+  transform-origin: left;
+}
+
+/* Flash verde nas linhas que a IA acabou de alterar */
+@keyframes ai-flash {
+  0% { background-color: color-mix(in srgb, var(--primary) 28%, transparent); }
+  100% { background-color: transparent; }
+}
+.animate-ai-flash {
+  animation: ai-flash 1.4s ease-out;
 }

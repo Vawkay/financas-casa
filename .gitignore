@@ -32,9 +32,18 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+!.env.example
+
+# planilha de referência (dados financeiros pessoais)
+/referencia
 
 # vercel
 .vercel
+
+# claude code / dev tools
+.mcp.json
+.claude/
+*.stackdump
 
 # typescript
 *.tsbuildinfo

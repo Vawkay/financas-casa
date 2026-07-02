@@ -1,0 +1,1 @@
+ALTER TABLE "debt" ADD COLUMN "amount_paid" numeric(14, 2) DEFAULT '0' NOT NULL;
