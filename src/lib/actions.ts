@@ -357,8 +357,8 @@ export async function deleteTransaction(id: string) {
 /* Contas do mês                                                      */
 /* ------------------------------------------------------------------ */
 
-const NEXT_STATUS: Record<string, "A_PAGAR" | "RESERVADO" | "PAGO"> = {
-  A_PAGAR: "RESERVADO",
+const TOGGLE_STATUS: Record<string, "A_PAGAR" | "PAGO"> = {
+  A_PAGAR: "PAGO",
   RESERVADO: "PAGO",
   PAGO: "A_PAGAR",
 };
@@ -431,7 +431,30 @@ export async function cycleBillStatus(id: string) {
 
   await db
     .update(monthlyBillStatus)
-    .set({ status: NEXT_STATUS[row.status] })
+    .set({ status: TOGGLE_STATUS[row.status] })
+    .where(
+      and(eq(monthlyBillStatus.id, id), eq(monthlyBillStatus.userId, user.id)),
+    );
+
+  revalidatePath("/contas");
+  revalidatePath("/");
+  return { ok: true };
+}
+
+export async function toggleBillReservado(id: string) {
+  const user = await requireUser();
+  const [row] = await db
+    .select({ status: monthlyBillStatus.status })
+    .from(monthlyBillStatus)
+    .where(
+      and(eq(monthlyBillStatus.id, id), eq(monthlyBillStatus.userId, user.id)),
+    );
+  if (!row || row.status === "PAGO") return { ok: false };
+
+  const next = row.status === "RESERVADO" ? "A_PAGAR" : "RESERVADO";
+  await db
+    .update(monthlyBillStatus)
+    .set({ status: next })
     .where(
       and(eq(monthlyBillStatus.id, id), eq(monthlyBillStatus.userId, user.id)),
     );

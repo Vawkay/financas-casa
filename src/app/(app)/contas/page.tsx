@@ -2,8 +2,9 @@ import Link from "next/link";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
 import { Card, CardContent } from "@/components/ui/card";
-import { BillRow, type Bill } from "@/components/bill-row";
+import { type Bill } from "@/components/bill-row";
 import { BillForm } from "@/components/bill-form";
+import { BillsList } from "@/components/bills-list";
 import { BillsGenerate } from "@/components/bills-generate";
 import { ContasCockpit } from "@/components/contas-cockpit";
 import {
@@ -146,20 +147,7 @@ export default async function ContasPage({
             </div>
           </div>
         ) : (
-          <>
-            <div className="flex items-center gap-3 border-b border-border px-4 py-2 text-xs text-muted-foreground">
-              <span className="flex-1">Conta</span>
-              <span className="hidden w-16 text-right sm:block">Peso</span>
-              <span className="w-28 text-right">Valor</span>
-              <span className="w-24 text-center">Situação</span>
-              <span className="w-14" />
-            </div>
-            <div className="divide-y divide-border">
-              {rows.map((b) => (
-                <BillRow key={b.id} bill={b} categories={categories} />
-              ))}
-            </div>
-          </>
+          <BillsList bills={rows} categories={categories} />
         )}
       </ContasCockpit>
     </div>

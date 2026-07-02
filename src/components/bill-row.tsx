@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import { Trash2, Pencil, Check, X, Info } from "lucide-react";
 import {
   cycleBillStatus,
+  toggleBillReservado,
   deleteMonthlyBill,
   updateMonthlyBill,
 } from "@/lib/actions";
@@ -12,10 +13,9 @@ import { formatBRL } from "@/lib/utils";
 import { Input, Select } from "@/components/ui/field";
 import { BillIcon } from "@/components/bill-icon";
 
-const STATUS_STYLE: Record<string, { label: string; cls: string }> = {
-  A_PAGAR: { label: "A pagar", cls: "bg-[var(--warning)]/15 text-[var(--warning)]" },
-  RESERVADO: { label: "Reservado", cls: "bg-sky-500/15 text-sky-400" },
-  PAGO: { label: "Pago", cls: "bg-primary/15 text-primary" },
+const BTN_STYLE = {
+  pending: "bg-[var(--warning)]/15 text-[var(--warning)]",
+  paid: "bg-primary/15 text-primary",
 };
 
 type Opt = { id: string; name: string };
@@ -44,7 +44,9 @@ export function BillRow({
   const [editing, setEditing] = useState(false);
   const [tipPos, setTipPos] = useState<{ x: number; y: number } | null>(null);
   const formRef = useRef<HTMLFormElement>(null);
-  const s = STATUS_STYLE[bill.status];
+
+  const isPago = bill.status === "PAGO";
+  const isReservado = bill.status === "RESERVADO";
 
   // Fecha a janelinha ao clicar em qualquer lugar, rolar ou redimensionar.
   useEffect(() => {
@@ -223,14 +225,33 @@ export function BillRow({
         {formatBRL(Number(bill.amount))}
       </div>
 
+      {/* Botão A pagar / Pago */}
       <button
         onClick={() => start(async () => void (await cycleBillStatus(bill.id)))}
         disabled={pending}
-        title="Clique para alternar a situação"
-        className={`w-24 shrink-0 rounded-full px-2.5 py-1 text-center text-xs font-medium ${s.cls} cursor-pointer`}
+        title={isPago ? "Clique para desfazer pagamento" : "Clique para marcar como pago"}
+        className={`w-20 shrink-0 rounded-full px-2.5 py-1 text-center text-xs font-medium cursor-pointer transition-colors ${
+          isPago ? BTN_STYLE.paid : BTN_STYLE.pending
+        }`}
       >
-        {s.label}
+        {isPago ? "Pago" : "A pagar"}
       </button>
+
+      {/* Caixinha de reservado */}
+      <div className="flex w-10 shrink-0 justify-center">
+        <button
+          onClick={() => start(async () => void (await toggleBillReservado(bill.id)))}
+          disabled={pending || isPago}
+          title={isPago ? "Já pago" : isReservado ? "Remover reserva" : "Marcar como reservado"}
+          className={`flex h-5 w-5 items-center justify-center rounded border text-[11px] font-bold transition-colors ${
+            isReservado
+              ? "border-sky-700 bg-sky-800 text-sky-200"
+              : "border-border bg-transparent text-transparent hover:border-muted-foreground"
+          } ${isPago ? "opacity-25 cursor-not-allowed" : "cursor-pointer"}`}
+        >
+          R
+        </button>
+      </div>
 
       <div className="flex w-14 shrink-0 items-center justify-end gap-2">
         <button
