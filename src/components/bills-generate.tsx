@@ -7,16 +7,18 @@ import { Button } from "@/components/ui/button";
 export function BillsGenerate({
   month,
   recurringCount,
+  canReplicate,
 }: {
   month: string;
   recurringCount: number;
+  canReplicate: boolean;
 }) {
   const [pending, start] = useTransition();
   const [msg, setMsg] = useState("");
 
   return (
     <div className="flex flex-col items-start gap-2">
-      {recurringCount === 0 ? (
+      {recurringCount === 0 && !canReplicate ? (
         <Button
           variant="secondary"
           disabled={pending}
@@ -36,7 +38,7 @@ export function BillsGenerate({
             )
           }
         >
-          {pending ? "Gerando..." : "Gerar contas recorrentes deste mês"}
+          {pending ? "Replicando..." : "Replicar contas do mês anterior"}
         </Button>
       )}
       {msg && <p className="text-sm text-muted-foreground">{msg}</p>}

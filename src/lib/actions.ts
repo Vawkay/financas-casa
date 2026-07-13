@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { db } from "@/db";
 import {
   account,
@@ -13,7 +13,7 @@ import {
   monthlyIncome,
   debt,
 } from "@/db/schema";
-import { monthKey } from "@/lib/utils";
+import { monthKey, shiftMonth } from "@/lib/utils";
 import { requireUser } from "@/lib/auth";
 
 /* ------------------------------------------------------------------ */
@@ -536,19 +536,21 @@ export async function deleteMonthlyBill(id: string) {
   return { ok: true };
 }
 
-/** Gera as instâncias do mês a partir das contas recorrentes ativas. */
+/**
+ * Replica as contas do mês anterior para `month`: cópia integral (situação
+ * volta para A_PAGAR) exceto parcelas que já terminaram no mês anterior
+ * (ex.: "Lojinha 3/3" não é replicável). O usuário decide na tela quais
+ * ficam ou não. Idempotente — rodar de novo não duplica o que já existe.
+ */
 export async function generateMonthFromRecurring(month: string) {
   const user = await requireUser();
-
-  const recurrents = await db
-    .select()
-    .from(recurringBill)
-    .where(
-      and(eq(recurringBill.userId, user.id), eq(recurringBill.active, true)),
-    );
+  const prevMonth = shiftMonth(month, -1);
 
   const existing = await db
-    .select({ rid: monthlyBillStatus.recurringBillId })
+    .select({
+      recurringBillId: monthlyBillStatus.recurringBillId,
+      name: monthlyBillStatus.name,
+    })
     .from(monthlyBillStatus)
     .where(
       and(
@@ -556,55 +558,87 @@ export async function generateMonthFromRecurring(month: string) {
         eq(monthlyBillStatus.month, month),
       ),
     );
-  const present = new Set(existing.map((e) => e.rid).filter(Boolean));
+  const existingRids = new Set(
+    existing.map((e) => e.recurringBillId).filter(Boolean),
+  );
+  const existingNames = new Set(
+    existing.filter((e) => !e.recurringBillId).map((e) => e.name.toLowerCase()),
+  );
 
-  // Para contas parceladas, a parcela atual = nº de instâncias já existentes + 1.
-  const counts = await db
+  const prevBills = await db
     .select({
-      rid: monthlyBillStatus.recurringBillId,
-      n: sql<number>`count(*)::int`,
+      recurringBillId: monthlyBillStatus.recurringBillId,
+      name: monthlyBillStatus.name,
+      amount: monthlyBillStatus.amount,
+      dueDay: monthlyBillStatus.dueDay,
+      categoryId: monthlyBillStatus.categoryId,
+      installmentNo: monthlyBillStatus.installmentNo,
+      installmentTotal: monthlyBillStatus.installmentTotal,
+      recurringDefaultAmount: recurringBill.defaultAmount,
     })
     .from(monthlyBillStatus)
-    .where(eq(monthlyBillStatus.userId, user.id))
-    .groupBy(monthlyBillStatus.recurringBillId);
-  const countByRid = new Map(counts.map((c) => [c.rid, c.n]));
+    .leftJoin(recurringBill, eq(monthlyBillStatus.recurringBillId, recurringBill.id))
+    .where(
+      and(
+        eq(monthlyBillStatus.userId, user.id),
+        eq(monthlyBillStatus.month, prevMonth),
+      ),
+    );
 
-  const toInsert = recurrents
-    .filter((r) => !present.has(r.id))
-    .map((r) => {
-      const installmentNo = r.installmentTotal
-        ? (countByRid.get(r.id) ?? 0) + 1
-        : null;
-      return {
-        userId: user.id,
-        month,
-        recurringBillId: r.id,
-        name: r.name,
-        amount: r.defaultAmount,
-        dueDay: r.dueDay,
-        categoryId: r.categoryId,
-        status: "A_PAGAR" as const,
-        installmentNo,
-        installmentTotal: r.installmentTotal,
-      };
-    })
-    // Não gera parcela além do total (financiamento já quitado).
-    .filter((b) => !b.installmentTotal || (b.installmentNo ?? 0) <= b.installmentTotal);
+  const finishedRecurringIds: string[] = [];
+  const toInsert: (typeof monthlyBillStatus.$inferInsert)[] = [];
+
+  for (const b of prevBills) {
+    // Parcela já concluída no mês anterior — não replicável.
+    if (b.installmentTotal && (b.installmentNo ?? 0) >= b.installmentTotal) {
+      if (b.recurringBillId) finishedRecurringIds.push(b.recurringBillId);
+      continue;
+    }
+    // Já existe no mês de destino (evita duplicar se clicar de novo).
+    const alreadyThere = b.recurringBillId
+      ? existingRids.has(b.recurringBillId)
+      : existingNames.has(b.name.toLowerCase());
+    if (alreadyThere) continue;
+
+    toInsert.push({
+      userId: user.id,
+      month,
+      recurringBillId: b.recurringBillId,
+      name: b.name,
+      // Contas recorrentes usam o valor padrão (respeita "aplicar pra frente");
+      // contas avulsas mantêm o valor do mês anterior.
+      amount: b.recurringBillId ? b.recurringDefaultAmount ?? b.amount : b.amount,
+      dueDay: b.dueDay,
+      categoryId: b.categoryId,
+      status: "A_PAGAR",
+      installmentNo: b.installmentTotal ? (b.installmentNo ?? 0) + 1 : null,
+      installmentTotal: b.installmentTotal,
+    });
+  }
 
   if (toInsert.length > 0) await db.insert(monthlyBillStatus).values(toInsert);
 
-  // Desativa recorrentes parceladas que chegaram ao fim.
-  for (const r of recurrents) {
-    if (r.installmentTotal && (countByRid.get(r.id) ?? 0) >= r.installmentTotal) {
-      await db
-        .update(recurringBill)
-        .set({ active: false })
-        .where(eq(recurringBill.id, r.id));
-    }
+  if (finishedRecurringIds.length > 0) {
+    await db
+      .update(recurringBill)
+      .set({ active: false })
+      .where(
+        and(
+          eq(recurringBill.userId, user.id),
+          inArray(recurringBill.id, finishedRecurringIds),
+        ),
+      );
   }
 
   revalidatePath("/contas");
-  return { ok: true, message: `${toInsert.length} contas geradas.` };
+  revalidatePath("/");
+  return {
+    ok: true,
+    message:
+      toInsert.length > 0
+        ? `${toInsert.length} contas replicadas de ${prevMonth}.`
+        : `Nenhuma conta nova para replicar (${prevMonth} já copiado ou vazio).`,
+  };
 }
 
 /** Contas fixas recorrentes da planilha (Junho/2026 como referência). */

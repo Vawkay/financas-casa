@@ -14,13 +14,7 @@ import {
   getRecurringForecast,
   getIncomeBreakdown,
 } from "@/lib/data";
-import { monthKey } from "@/lib/utils";
-
-function shiftMonth(month: string, delta: number): string {
-  const [y, m] = month.split("-").map(Number);
-  const d = new Date(y, m - 1 + delta, 1);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-}
+import { monthKey, shiftMonth } from "@/lib/utils";
 
 function monthLabel(month: string): string {
   const [y, m] = month.split("-").map(Number);
@@ -39,15 +33,19 @@ export default async function ContasPage({
   const month = sp.month ?? monthKey();
   const isCurrentMonth = month === monthKey();
 
-  const [bills, categories, recurringCount, forecast, income] =
+  const prevMonth = shiftMonth(month, -1);
+
+  const [bills, categories, recurringCount, forecast, income, prevBills] =
     await Promise.all([
       getMonthlyBills(month),
       getCategories(),
       getRecurringBillCount(),
       getRecurringForecast(),
       getIncomeBreakdown(month),
+      getMonthlyBills(prevMonth),
     ]);
 
+  const canReplicate = prevBills.length > 0;
   const nextMonth = shiftMonth(month, 1);
 
   const total = bills.reduce((s, b) => s + Number(b.amount), 0);
@@ -127,8 +125,12 @@ export default async function ContasPage({
             <CardContent className="p-4">
               <div className="mb-3 flex items-center justify-between gap-2">
                 <h2 className="text-sm font-medium">Adicionar conta</h2>
-                {recurringCount > 0 && (
-                  <BillsGenerate month={month} recurringCount={recurringCount} />
+                {(recurringCount > 0 || canReplicate) && (
+                  <BillsGenerate
+                    month={month}
+                    recurringCount={recurringCount}
+                    canReplicate={canReplicate}
+                  />
                 )}
               </div>
               <BillForm month={month} categories={categories} />
@@ -143,7 +145,11 @@ export default async function ContasPage({
               adicione abaixo.
             </p>
             <div className="flex justify-center">
-              <BillsGenerate month={month} recurringCount={recurringCount} />
+              <BillsGenerate
+                month={month}
+                recurringCount={recurringCount}
+                canReplicate={canReplicate}
+              />
             </div>
           </div>
         ) : (
